@@ -316,18 +316,36 @@ export default function Chat() {
           await saveMessage(aiMessage, chatId);
         }
       } else {
-        // Regular text message with streaming
+        // Regular text message with streaming (potentially with images)
+        const messagePayload = {
+          messages: [...messages, userMessage].map((msg, idx) => {
+            const content: any = msg.text;
+            // Add uploaded images to the last user message
+            if (msg.sender === "user" && idx === messages.length && uploadedImages.length > 0) {
+              return {
+                role: "user",
+                content: [
+                  { type: "text", text: msg.text },
+                  ...uploadedImages.map((img) => ({
+                    type: "image_url",
+                    image_url: { url: img },
+                  })),
+                ],
+              };
+            }
+            return {
+              role: msg.sender === "user" ? "user" : "assistant",
+              content: content,
+            };
+          }),
+        };
+
         const response = await fetch("/api/chat", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({
-            messages: [...messages, userMessage].map((msg) => ({
-              role: msg.sender === "user" ? "user" : "assistant",
-              content: msg.text,
-            })),
-          }),
+          body: JSON.stringify(messagePayload),
         });
 
         console.log("API response status:", response.status);
