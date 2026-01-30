@@ -1,4 +1,5 @@
 import { RequestHandler } from "express";
+import OpenAI from "openai";
 
 interface Message {
   role: "user" | "assistant";
@@ -28,76 +29,35 @@ export const handleChat: RequestHandler = async (req, res) => {
       messages.length,
     );
 
-    const requestBody = {
-      model: "liquid/lfm-2.5-1.2b-thinking:free",
-      messages: messages,
-      max_tokens: 1024,
-    };
+    // Initialize OpenAI client with OpenRouter configuration
+    const client = new OpenAI({
+      baseURL: "https://openrouter.ai/api/v1",
+      apiKey: OPENROUTER_API_KEY,
+      defaultHeaders: {
+        "HTTP-Referer": "https://pinia.example.com",
+        "X-Title": "PinIA Chat",
+      },
+    });
 
     console.log("Request to OpenRouter:", {
-      url: "https://openrouter.io/api/v1/chat/completions",
-      model: requestBody.model,
+      url: "https://openrouter.ai/api/v1/chat/completions",
+      model: "arcee-ai/trinity-large-preview:free",
       messageCount: messages.length,
     });
 
-    const response = await fetch(
-      "https://openrouter.io/api/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${OPENROUTER_API_KEY}`,
-          "Referer": "https://pinia.example.com",
-          "X-Title": "PinIA Chat",
-        },
-        body: JSON.stringify(requestBody),
-      },
-    );
+    const apiResponse = await client.chat.completions.create({
+      model: "arcee-ai/trinity-large-preview:free",
+      messages: messages,
+      max_tokens: 1024,
+    });
 
-    console.log("OpenRouter response status:", response.status);
-
-    // Read response as text first to debug
-    const responseText = await response.text();
-    console.log("OpenRouter raw response length:", responseText.length);
-    console.log("OpenRouter raw response:", responseText.substring(0, 500));
-
-    if (!response.ok) {
-      console.error("OpenRouter HTTP error:", response.status);
-      if (responseText) {
-        try {
-          const errorData = JSON.parse(responseText);
-          console.error("OpenRouter error data:", errorData);
-          return res.status(response.status).json(errorData);
-        } catch (e) {
-          console.error("Failed to parse error response:", responseText);
-          return res.status(response.status).json({ error: responseText });
-        }
-      }
-      return res
-        .status(response.status)
-        .json({ error: "Empty error response from OpenRouter" });
-    }
-
-    if (!responseText) {
-      console.error("OpenRouter returned empty response");
-      return res.status(500).json({ error: "Empty response from OpenRouter" });
-    }
-
-    let data;
-    try {
-      data = JSON.parse(responseText);
-    } catch (e) {
-      console.error("Failed to parse OpenRouter response:", e);
-      return res
-        .status(500)
-        .json({ error: "Invalid response format from OpenRouter" });
-    }
+    console.log("OpenRouter response received successfully");
 
     const assistantMessage =
-      data.choices?.[0]?.message?.content || "I couldn't generate a response.";
+      apiResponse.choices?.[0]?.message?.content || "I couldn't generate a response.";
 
     console.log(
-      "OpenRouter response received:",
+      "Response content:",
       assistantMessage.substring(0, 100),
     );
     res.json({ message: assistantMessage });
