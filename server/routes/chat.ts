@@ -28,7 +28,7 @@ export const handleChat: RequestHandler = async (req, res) => {
     );
 
     const requestBody = {
-      model: "anthropic/claude-3.5-sonnet",
+      model: "google/gemma-3-12b-it:free",
       messages: messages,
       max_tokens: 1024,
     };
