@@ -76,15 +76,9 @@ export const handleChat: RequestHandler = async (req, res) => {
     });
 
     // Use streaming for real-time text display
-    // Ensure proper message alternation for API compatibility
-    const validatedMessages = messages.map((msg) => ({
-      role: msg.role,
-      content: msg.content,
-    }));
-
     const stream = await client.chat.completions.create({
       model: "allenai/molmo-2-8b:free",
-      messages: validatedMessages as any,
+      messages: validMessages as any,
       max_tokens: 1024,
       stream: true,
     });
