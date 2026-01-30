@@ -93,24 +93,38 @@ export const handleChat: RequestHandler = async (req, res) => {
     res.setHeader("Connection", "keep-alive");
 
     let fullMessage = "";
+    let imageUrls: string[] = [];
 
     // Stream the response
     for await (const chunk of stream) {
-      const content = chunk.choices[0]?.delta?.content || "";
+      const delta = chunk.choices[0]?.delta;
+
+      // Handle text content
+      const content = delta?.content || "";
       if (content) {
         fullMessage += content;
         // Send each chunk as SSE
         res.write(`data: ${JSON.stringify({ content })}\n\n`);
+      }
+
+      // Handle image generation in the delta
+      if ((delta as any)?.image) {
+        const imageUrl = (delta as any).image;
+        imageUrls.push(imageUrl);
+        console.log("Image generated in stream");
+        res.write(`data: ${JSON.stringify({ image: imageUrl })}\n\n`);
       }
     }
 
     console.log(
       "Stream completed, total length:",
       fullMessage.length,
+      "images:",
+      imageUrls.length,
     );
 
     // Send completion signal
-    res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+    res.write(`data: ${JSON.stringify({ done: true, images: imageUrls })}\n\n`);
     res.end();
   } catch (error) {
     console.error("Chat API error:", error);
