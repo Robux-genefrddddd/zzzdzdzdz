@@ -76,11 +76,13 @@ export const handleChat: RequestHandler = async (req, res) => {
     });
 
     // Use streaming for real-time text display
+    // Enable image generation with modalities
     const stream = await client.chat.completions.create({
       model: "allenai/molmo-2-8b:free",
       messages: validMessages as any,
       max_tokens: 1024,
       stream: true,
+      modalities: ["text", "image"] as any,
     });
 
     console.log("OpenRouter stream started successfully");
