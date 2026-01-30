@@ -61,7 +61,10 @@ export const handleGenerateImage: RequestHandler = async (req, res) => {
         imageUrl = images[0]?.image_url?.url;
         console.log("Image generated successfully");
       }
-    } else if (typeof response.content === "string" && response.content.startsWith("data:image")) {
+    } else if (
+      typeof response.content === "string" &&
+      response.content.startsWith("data:image")
+    ) {
       // Sometimes the image comes as base64 in content
       imageUrl = response.content;
       console.log("Image received as base64");
@@ -77,7 +80,8 @@ export const handleGenerateImage: RequestHandler = async (req, res) => {
     res.json({ imageUrl, prompt });
   } catch (error) {
     console.error("Image generation API error:", error);
-    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
     console.error("Full error:", error);
     res.status(500).json({
       error: `Server error: ${errorMessage}`,

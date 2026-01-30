@@ -3,7 +3,9 @@ import OpenAI from "openai";
 
 interface Message {
   role: "user" | "assistant";
-  content: string | Array<{ type: string; text?: string; image_url?: { url: string } }>;
+  content:
+    | string
+    | Array<{ type: string; text?: string; image_url?: { url: string } }>;
 }
 
 // Ensure message alternation (user/assistant/user/assistant...)
@@ -15,7 +17,7 @@ function ensureProperAlternation(messages: Message[]): Message[] {
     // Skip if same role as last message (to maintain alternation)
     if (msg.role === lastRole) {
       console.warn(
-        `Skipping consecutive ${msg.role} message to maintain alternation`
+        `Skipping consecutive ${msg.role} message to maintain alternation`,
       );
       continue;
     }
@@ -46,18 +48,33 @@ export const handleChat: RequestHandler = async (req, res) => {
         .json({ error: "OpenRouter API key not configured" });
     }
 
-    console.log("OpenRouter API Key loaded:", OPENROUTER_API_KEY.substring(0, 20) + "...");
+    console.log(
+      "OpenRouter API Key loaded:",
+      OPENROUTER_API_KEY.substring(0, 20) + "...",
+    );
     console.log(
       "Sending request to OpenRouter with messages:",
       messages.length,
     );
 
     // Debug: log messages structure
-    console.log("Messages structure:", JSON.stringify(messages.map((m) => ({
-      role: m.role,
-      contentType: typeof m.content,
-      contentLength: typeof m.content === 'string' ? m.content.length : Array.isArray(m.content) ? m.content.length : 'unknown'
-    })), null, 2));
+    console.log(
+      "Messages structure:",
+      JSON.stringify(
+        messages.map((m) => ({
+          role: m.role,
+          contentType: typeof m.content,
+          contentLength:
+            typeof m.content === "string"
+              ? m.content.length
+              : Array.isArray(m.content)
+                ? m.content.length
+                : "unknown",
+        })),
+        null,
+        2,
+      ),
+    );
 
     // Initialize OpenAI client with OpenRouter configuration
     const client = new OpenAI({
@@ -128,10 +145,8 @@ export const handleChat: RequestHandler = async (req, res) => {
     res.end();
   } catch (error) {
     console.error("Chat API error:", error);
-    res
-      .status(500)
-      .json({
-        error: `Server error: ${error instanceof Error ? error.message : "Unknown error"}`,
-      });
+    res.status(500).json({
+      error: `Server error: ${error instanceof Error ? error.message : "Unknown error"}`,
+    });
   }
 };

@@ -279,10 +279,15 @@ export default function Chat() {
           } else {
             const errorText = await imageResponse.text();
             console.error("Image generation failed:", errorText);
-            throw new Error(`Failed to generate image: ${imageResponse.status}`);
+            throw new Error(
+              `Failed to generate image: ${imageResponse.status}`,
+            );
           }
         } catch (imageError) {
-          console.error("Image generation failed, falling back to text:", imageError);
+          console.error(
+            "Image generation failed, falling back to text:",
+            imageError,
+          );
           // Fall back to text response
           const response = await fetch("/api/chat", {
             method: "POST",
@@ -558,8 +563,9 @@ export default function Chat() {
                                   "Failed to load image:",
                                   message.imageUrl,
                                 );
-                                (e.currentTarget as HTMLImageElement).style.display =
-                                  "none";
+                                (
+                                  e.currentTarget as HTMLImageElement
+                                ).style.display = "none";
                               }}
                             />
                           </div>
