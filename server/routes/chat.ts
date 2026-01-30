@@ -47,8 +47,8 @@ export const handleChat: RequestHandler = async (req, res) => {
 
     // Use streaming for real-time text display
     const stream = await client.chat.completions.create({
-      model: "arcee-ai/trinity-large-preview:free",
-      messages: messages,
+      model: "allenai/molmo-2-8b:free",
+      messages: messages as any,
       max_tokens: 1024,
       stream: true,
     });
