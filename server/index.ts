@@ -3,6 +3,7 @@ import express from "express";
 import cors from "cors";
 import { handleDemo } from "./routes/demo";
 import { handleChat } from "./routes/chat";
+import { handleGenerateImage } from "./routes/image";
 
 export function createServer() {
   const app = express();
