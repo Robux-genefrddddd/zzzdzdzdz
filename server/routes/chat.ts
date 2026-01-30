@@ -28,7 +28,7 @@ export const handleChat: RequestHandler = async (req, res) => {
     );
 
     const requestBody = {
-      model: "upstage/solar-pro-3:free",
+      model: "openai/gpt-3.5-turbo",
       messages: messages,
       max_tokens: 1024,
     };
