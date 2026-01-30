@@ -290,7 +290,7 @@ export default function Chat() {
           await saveMessage(aiMessage, chatId);
         }
       } else {
-        // Regular text message
+        // Regular text message with streaming
         const response = await fetch("/api/chat", {
           method: "POST",
           headers: {
@@ -307,27 +307,58 @@ export default function Chat() {
         console.log("API response status:", response.status);
 
         if (!response.ok) {
-          const errorData = await response.json();
-          console.error("API error response:", errorData);
           throw new Error(`API error: ${response.status}`);
         }
 
-        const data = await response.json();
-        console.log("API response data:", data);
-
-        if (!data.message) {
-          throw new Error("No message in response");
+        if (!response.body) {
+          throw new Error("No response body");
         }
 
+        // Create AI message placeholder
         aiMessage = {
           id: Math.random().toString(),
-          text: data.message,
+          text: "",
           sender: "ai",
           timestamp: new Date(),
         };
 
-        console.log("Adding AI message:", aiMessage.text);
         setMessages((prev) => [...prev, aiMessage]);
+
+        // Read streaming response
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
+
+          for (const line of lines) {
+            if (line.startsWith("data: ")) {
+              try {
+                const data = JSON.parse(line.slice(6));
+                if (data.done) {
+                  console.log("Stream completed");
+                } else if (data.content) {
+                  aiMessage.text += data.content;
+                  setMessages((prev) => {
+                    const updated = [...prev];
+                    updated[updated.length - 1] = { ...aiMessage };
+                    return updated;
+                  });
+                }
+              } catch (e) {
+                console.error("Failed to parse SSE data:", e);
+              }
+            }
+          }
+        }
+
+        console.log("Adding AI message:", aiMessage.text);
         await saveMessage(aiMessage, chatId);
       }
     } catch (error) {
