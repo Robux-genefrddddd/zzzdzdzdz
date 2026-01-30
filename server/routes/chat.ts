@@ -22,6 +22,7 @@ export const handleChat: RequestHandler = async (req, res) => {
         .json({ error: "OpenRouter API key not configured" });
     }
 
+    console.log("OpenRouter API Key loaded:", OPENROUTER_API_KEY.substring(0, 20) + "...");
     console.log(
       "Sending request to OpenRouter with messages:",
       messages.length,
