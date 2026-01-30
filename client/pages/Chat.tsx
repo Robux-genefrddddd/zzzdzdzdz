@@ -260,6 +260,8 @@ export default function Chat() {
             }),
           });
 
+          console.log("Image response status:", imageResponse.status);
+
           if (imageResponse.ok) {
             const imageData = await imageResponse.json();
             console.log("Image generated successfully");
@@ -275,7 +277,9 @@ export default function Chat() {
             setMessages((prev) => [...prev, aiMessage]);
             await saveMessage(aiMessage, chatId);
           } else {
-            throw new Error("Failed to generate image");
+            const errorText = await imageResponse.text();
+            console.error("Image generation failed:", errorText);
+            throw new Error(`Failed to generate image: ${imageResponse.status}`);
           }
         } catch (imageError) {
           console.error("Image generation failed, falling back to text:", imageError);
@@ -294,26 +298,58 @@ export default function Chat() {
           });
 
           if (!response.ok) {
-            const errorData = await response.json();
-            console.error("API error response:", errorData);
             throw new Error(`API error: ${response.status}`);
           }
 
-          const data = await response.json();
-          console.log("API response data:", data);
-
-          if (!data.message) {
-            throw new Error("No message in response");
+          if (!response.body) {
+            throw new Error("No response body");
           }
 
+          // Create AI message placeholder
           aiMessage = {
             id: Math.random().toString(),
-            text: data.message,
+            text: "",
             sender: "ai",
             timestamp: new Date(),
           };
 
           setMessages((prev) => [...prev, aiMessage]);
+
+          // Read streaming response
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+          let buffer = "";
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split("\n");
+            buffer = lines.pop() || "";
+
+            for (const line of lines) {
+              if (line.startsWith("data: ")) {
+                try {
+                  const data = JSON.parse(line.slice(6));
+                  if (data.done) {
+                    console.log("Stream completed");
+                  } else if (data.content) {
+                    aiMessage.text += data.content;
+                    setMessages((prev) => {
+                      const updated = [...prev];
+                      updated[updated.length - 1] = { ...aiMessage };
+                      return updated;
+                    });
+                  }
+                } catch (e) {
+                  console.error("Failed to parse SSE data:", e);
+                }
+              }
+            }
+          }
+
+          console.log("Adding fallback text message:", aiMessage.text);
           await saveMessage(aiMessage, chatId);
         }
       } else {
