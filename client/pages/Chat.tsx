@@ -317,11 +317,15 @@ export default function Chat() {
         }
       } else {
         // Regular text message with streaming (potentially with images)
+        const allMessages = [...messages, userMessage];
         const messagePayload = {
-          messages: [...messages, userMessage].map((msg, idx) => {
-            const content: any = msg.text;
-            // Add uploaded images to the last user message
-            if (msg.sender === "user" && idx === messages.length && uploadedImages.length > 0) {
+          messages: allMessages.map((msg, idx) => {
+            // Add uploaded images to the last user message if any
+            if (
+              msg.sender === "user" &&
+              idx === allMessages.length - 1 &&
+              uploadedImages.length > 0
+            ) {
               return {
                 role: "user",
                 content: [
@@ -335,7 +339,7 @@ export default function Chat() {
             }
             return {
               role: msg.sender === "user" ? "user" : "assistant",
-              content: content,
+              content: msg.text,
             };
           }),
         };
