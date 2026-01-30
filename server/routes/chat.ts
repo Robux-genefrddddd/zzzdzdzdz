@@ -29,6 +29,13 @@ export const handleChat: RequestHandler = async (req, res) => {
       messages.length,
     );
 
+    // Debug: log messages structure
+    console.log("Messages structure:", JSON.stringify(messages.map((m) => ({
+      role: m.role,
+      contentType: typeof m.content,
+      contentLength: typeof m.content === 'string' ? m.content.length : Array.isArray(m.content) ? m.content.length : 'unknown'
+    })), null, 2));
+
     // Initialize OpenAI client with OpenRouter configuration
     const client = new OpenAI({
       baseURL: "https://openrouter.ai/api/v1",
