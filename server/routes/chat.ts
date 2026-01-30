@@ -29,7 +29,7 @@ export const handleChat: RequestHandler = async (req, res) => {
     );
 
     const requestBody = {
-      model: "google/gemma-3-12b-it:free",
+      model: "mistralai/mistral-7b-instruct:free",
       messages: messages,
       max_tokens: 1024,
     };
