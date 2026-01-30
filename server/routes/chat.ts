@@ -6,6 +6,26 @@ interface Message {
   content: string | Array<{ type: string; text?: string; image_url?: { url: string } }>;
 }
 
+// Ensure message alternation (user/assistant/user/assistant...)
+function ensureProperAlternation(messages: Message[]): Message[] {
+  const result: Message[] = [];
+  let lastRole: "user" | "assistant" | null = null;
+
+  for (const msg of messages) {
+    // Skip if same role as last message (to maintain alternation)
+    if (msg.role === lastRole) {
+      console.warn(
+        `Skipping consecutive ${msg.role} message to maintain alternation`
+      );
+      continue;
+    }
+    result.push(msg);
+    lastRole = msg.role;
+  }
+
+  return result;
+}
+
 export const handleChat: RequestHandler = async (req, res) => {
   try {
     const { messages } = req.body as { messages: Message[] };
@@ -14,6 +34,9 @@ export const handleChat: RequestHandler = async (req, res) => {
       console.error("Invalid messages format:", messages);
       return res.status(400).json({ error: "Invalid messages format" });
     }
+
+    // Ensure proper role alternation
+    const validMessages = ensureProperAlternation(messages);
 
     const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
     if (!OPENROUTER_API_KEY) {
