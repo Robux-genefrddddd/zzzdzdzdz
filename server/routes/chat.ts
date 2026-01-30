@@ -28,7 +28,7 @@ export const handleChat: RequestHandler = async (req, res) => {
     );
 
     const requestBody = {
-      model: "meta-llama/llama-3.1-70b-instruct:free",
+      model: "anthropic/claude-3.5-sonnet",
       messages: messages,
       max_tokens: 1024,
     };
