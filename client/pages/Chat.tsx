@@ -431,6 +431,23 @@ export default function Chat() {
                             : "bg-gradient-to-br from-gray-800/70 to-gray-900/70 text-gray-100 rounded-bl-lg border border-gray-700/50 hover:border-gray-600/70"
                         }`}
                       >
+                        {message.imageUrl && (
+                          <div className="mb-3">
+                            <img
+                              src={message.imageUrl}
+                              alt="Generated image"
+                              className="rounded-lg max-w-xs h-auto"
+                              onError={(e) => {
+                                console.error(
+                                  "Failed to load image:",
+                                  message.imageUrl,
+                                );
+                                (e.currentTarget as HTMLImageElement).style.display =
+                                  "none";
+                              }}
+                            />
+                          </div>
+                        )}
                         <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
                           {message.text}
                         </p>
