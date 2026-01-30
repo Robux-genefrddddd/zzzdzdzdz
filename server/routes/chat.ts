@@ -45,22 +45,41 @@ export const handleChat: RequestHandler = async (req, res) => {
       messageCount: messages.length,
     });
 
-    const apiResponse = await client.chat.completions.create({
+    // Use streaming for real-time text display
+    const stream = await client.chat.completions.create({
       model: "arcee-ai/trinity-large-preview:free",
       messages: messages,
       max_tokens: 1024,
+      stream: true,
     });
 
-    console.log("OpenRouter response received successfully");
+    console.log("OpenRouter stream started successfully");
 
-    const assistantMessage =
-      apiResponse.choices?.[0]?.message?.content || "I couldn't generate a response.";
+    // Set headers for streaming
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+
+    let fullMessage = "";
+
+    // Stream the response
+    for await (const chunk of stream) {
+      const content = chunk.choices[0]?.delta?.content || "";
+      if (content) {
+        fullMessage += content;
+        // Send each chunk as SSE
+        res.write(`data: ${JSON.stringify({ content })}\n\n`);
+      }
+    }
 
     console.log(
-      "Response content:",
-      assistantMessage.substring(0, 100),
+      "Stream completed, total length:",
+      fullMessage.length,
     );
-    res.json({ message: assistantMessage });
+
+    // Send completion signal
+    res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+    res.end();
   } catch (error) {
     console.error("Chat API error:", error);
     res
