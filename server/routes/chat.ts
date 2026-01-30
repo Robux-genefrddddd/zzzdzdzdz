@@ -28,7 +28,7 @@ export const handleChat: RequestHandler = async (req, res) => {
     );
 
     const requestBody = {
-      model: "arcee-ai/trinity-large-preview:free",
+      model: "meta-llama/llama-3.1-70b-instruct:free",
       messages: messages,
       max_tokens: 1024,
     };
