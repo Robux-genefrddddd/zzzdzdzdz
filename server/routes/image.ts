@@ -29,46 +29,58 @@ export const handleGenerateImage: RequestHandler = async (req, res) => {
       },
     });
 
-    // Use streaming for image generation
-    const stream = await client.chat.completions.create({
-      model: "bytedance-seed/seedream-4.5",
+    // Generate image using Flux model
+    const apiResponse = await client.chat.completions.create({
+      model: "black-forest-labs/flux.2-klein-4b",
       messages: [
         {
           role: "user",
-          content: `Generate an image: ${prompt}`,
+          content: prompt,
         },
       ],
+      modalities: ["image", "text"] as any,
       max_tokens: 1024,
-      stream: true,
     });
 
-    console.log("Image generation stream started");
+    console.log("Image generation response received");
 
-    // Set headers for streaming
-    res.setHeader("Content-Type", "text/event-stream");
-    res.setHeader("Cache-Control", "no-cache");
-    res.setHeader("Connection", "keep-alive");
-
-    let fullResponse = "";
-
-    // Stream the response
-    for await (const chunk of stream) {
-      const content = chunk.choices[0]?.delta?.content || "";
-      if (content) {
-        fullResponse += content;
-        res.write(`data: ${JSON.stringify({ content })}\n\n`);
-      }
+    const response = apiResponse.choices[0]?.message;
+    if (!response) {
+      console.error("No response from image generation");
+      return res
+        .status(500)
+        .json({ error: "No response from image generation" });
     }
 
-    console.log("Image generation completed, response length:", fullResponse.length);
+    let imageUrl: string | null = null;
 
-    // Send completion signal
-    res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
-    res.end();
+    // Check for images in the response
+    if ((response as any).images && Array.isArray((response as any).images)) {
+      const images = (response as any).images;
+      if (images.length > 0) {
+        imageUrl = images[0]?.image_url?.url;
+        console.log("Image generated successfully");
+      }
+    } else if (typeof response.content === "string" && response.content.startsWith("data:image")) {
+      // Sometimes the image comes as base64 in content
+      imageUrl = response.content;
+      console.log("Image received as base64");
+    }
+
+    if (!imageUrl) {
+      console.error("No image URL in response:", response);
+      return res
+        .status(500)
+        .json({ error: "No image generated from the model" });
+    }
+
+    res.json({ imageUrl, prompt });
   } catch (error) {
     console.error("Image generation API error:", error);
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    console.error("Full error:", error);
     res.status(500).json({
-      error: `Server error: ${error instanceof Error ? error.message : "Unknown error"}`,
+      error: `Server error: ${errorMessage}`,
     });
   }
 };
