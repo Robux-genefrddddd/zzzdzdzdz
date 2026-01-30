@@ -200,46 +200,136 @@ export default function Chat() {
     setIsLoading(true);
     setTypingUsername("PinIA");
 
+    // Check if the user is asking for image generation
+    const imageKeywords = [
+      "create",
+      "generate",
+      "draw",
+      "make",
+      "image",
+      "picture",
+      "photo",
+      "illustration",
+    ];
+    const isImageRequest = imageKeywords.some((keyword) =>
+      messageText.toLowerCase().includes(keyword),
+    );
+
     try {
       console.log("Sending message to API...");
-      const response = await fetch("/api/chat", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          messages: [...messages, userMessage].map((msg) => ({
-            role: msg.sender === "user" ? "user" : "assistant",
-            content: msg.text,
-          })),
-        }),
-      });
+      let aiMessage: Message;
 
-      console.log("API response status:", response.status);
+      if (isImageRequest) {
+        // First try to generate an image
+        console.log("Detected image request, generating image...");
+        try {
+          const imageResponse = await fetch("/api/generate-image", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              prompt: messageText,
+            }),
+          });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        console.error("API error response:", errorData);
-        throw new Error(`API error: ${response.status}`);
+          if (imageResponse.ok) {
+            const imageData = await imageResponse.json();
+            console.log("Image generated successfully");
+
+            aiMessage = {
+              id: Math.random().toString(),
+              text: `Here's the image you requested:\n\n*Image generated from: "${messageText}"*`,
+              sender: "ai",
+              timestamp: new Date(),
+              imageUrl: imageData.imageUrl,
+            };
+
+            setMessages((prev) => [...prev, aiMessage]);
+            await saveMessage(aiMessage, chatId);
+          } else {
+            throw new Error("Failed to generate image");
+          }
+        } catch (imageError) {
+          console.error("Image generation failed, falling back to text:", imageError);
+          // Fall back to text response
+          const response = await fetch("/api/chat", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              messages: [...messages, userMessage].map((msg) => ({
+                role: msg.sender === "user" ? "user" : "assistant",
+                content: msg.text,
+              })),
+            }),
+          });
+
+          if (!response.ok) {
+            const errorData = await response.json();
+            console.error("API error response:", errorData);
+            throw new Error(`API error: ${response.status}`);
+          }
+
+          const data = await response.json();
+          console.log("API response data:", data);
+
+          if (!data.message) {
+            throw new Error("No message in response");
+          }
+
+          aiMessage = {
+            id: Math.random().toString(),
+            text: data.message,
+            sender: "ai",
+            timestamp: new Date(),
+          };
+
+          setMessages((prev) => [...prev, aiMessage]);
+          await saveMessage(aiMessage, chatId);
+        }
+      } else {
+        // Regular text message
+        const response = await fetch("/api/chat", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            messages: [...messages, userMessage].map((msg) => ({
+              role: msg.sender === "user" ? "user" : "assistant",
+              content: msg.text,
+            })),
+          }),
+        });
+
+        console.log("API response status:", response.status);
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          console.error("API error response:", errorData);
+          throw new Error(`API error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        console.log("API response data:", data);
+
+        if (!data.message) {
+          throw new Error("No message in response");
+        }
+
+        aiMessage = {
+          id: Math.random().toString(),
+          text: data.message,
+          sender: "ai",
+          timestamp: new Date(),
+        };
+
+        console.log("Adding AI message:", aiMessage.text);
+        setMessages((prev) => [...prev, aiMessage]);
+        await saveMessage(aiMessage, chatId);
       }
-
-      const data = await response.json();
-      console.log("API response data:", data);
-
-      if (!data.message) {
-        throw new Error("No message in response");
-      }
-
-      const aiMessage: Message = {
-        id: Math.random().toString(),
-        text: data.message,
-        sender: "ai",
-        timestamp: new Date(),
-      };
-
-      console.log("Adding AI message:", aiMessage.text);
-      setMessages((prev) => [...prev, aiMessage]);
-      await saveMessage(aiMessage, chatId);
     } catch (error) {
       console.error("Chat error:", error);
       const errorMessage: Message = {
