@@ -223,6 +223,7 @@ export default function Chat() {
     setMessages((prev) => [...prev, userMessage]);
     await saveMessage(userMessage, chatId);
     setInput("");
+    setUploadedImages([]);
     setIsLoading(true);
     setTypingUsername("PinIA");
 
