@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { ArrowUp, Menu, X, ArrowRight } from "lucide-react";
+import { ArrowUp, Menu, X, ArrowRight, Image as ImageIcon } from "lucide-react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import Sidebar from "@/components/Sidebar";
 import Squares from "@/components/Squares";
@@ -20,6 +20,7 @@ interface Message {
   text: string;
   sender: "user" | "ai";
   timestamp: Date;
+  imageUrl?: string;
 }
 
 export default function Chat() {
@@ -41,6 +42,8 @@ export default function Chat() {
   const [currentChatId, setCurrentChatId] = useState<string>("");
   const [typingUsername, setTypingUsername] = useState<string | null>(null);
   const currentChatIdRef = useRef<string>("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadedImages, setUploadedImages] = useState<string[]>([]);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -51,6 +54,30 @@ export default function Chat() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const base64 = event.target?.result as string;
+        setUploadedImages((prev) => [...prev, base64]);
+      };
+      reader.readAsDataURL(file);
+    }
+
+    // Reset input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
+  const removeImage = (index: number) => {
+    setUploadedImages((prev) => prev.filter((_, i) => i !== index));
+  };
 
   useEffect(() => {
     const handleChatNavigation = async () => {
@@ -196,49 +223,234 @@ export default function Chat() {
     setMessages((prev) => [...prev, userMessage]);
     await saveMessage(userMessage, chatId);
     setInput("");
+    setUploadedImages([]);
     setIsLoading(true);
     setTypingUsername("PinIA");
 
+    // Check if the user is asking for image generation
+    const imageKeywords = [
+      "create",
+      "generate",
+      "draw",
+      "make",
+      "image",
+      "picture",
+      "photo",
+      "illustration",
+    ];
+    const isImageRequest = imageKeywords.some((keyword) =>
+      messageText.toLowerCase().includes(keyword),
+    );
+
     try {
       console.log("Sending message to API...");
-      const response = await fetch("/api/chat", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          messages: [...messages, userMessage].map((msg) => ({
-            role: msg.sender === "user" ? "user" : "assistant",
-            content: msg.text,
-          })),
-        }),
-      });
+      let aiMessage: Message;
 
-      console.log("API response status:", response.status);
+      if (isImageRequest) {
+        // First try to generate an image
+        console.log("Detected image request, generating image...");
+        try {
+          const imageResponse = await fetch("/api/generate-image", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              prompt: messageText,
+            }),
+          });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        console.error("API error response:", errorData);
-        throw new Error(`API error: ${response.status}`);
+          console.log("Image response status:", imageResponse.status);
+
+          if (imageResponse.ok) {
+            const imageData = await imageResponse.json();
+            console.log("Image generated successfully");
+
+            aiMessage = {
+              id: Math.random().toString(),
+              text: `Here's the image you requested:\n\n*Image generated from: "${messageText}"*`,
+              sender: "ai",
+              timestamp: new Date(),
+              imageUrl: imageData.imageUrl,
+            };
+
+            setMessages((prev) => [...prev, aiMessage]);
+            await saveMessage(aiMessage, chatId);
+          } else {
+            const errorText = await imageResponse.text();
+            console.error("Image generation failed:", errorText);
+            throw new Error(
+              `Failed to generate image: ${imageResponse.status}`,
+            );
+          }
+        } catch (imageError) {
+          console.error(
+            "Image generation failed, falling back to text:",
+            imageError,
+          );
+          // Fall back to text response
+          const response = await fetch("/api/chat", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              messages: [...messages, userMessage].map((msg) => ({
+                role: msg.sender === "user" ? "user" : "assistant",
+                content: msg.text,
+              })),
+            }),
+          });
+
+          if (!response.ok) {
+            throw new Error(`API error: ${response.status}`);
+          }
+
+          if (!response.body) {
+            throw new Error("No response body");
+          }
+
+          // Create AI message placeholder
+          aiMessage = {
+            id: Math.random().toString(),
+            text: "",
+            sender: "ai",
+            timestamp: new Date(),
+          };
+
+          setMessages((prev) => [...prev, aiMessage]);
+
+          // Read streaming response
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+          let buffer = "";
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split("\n");
+            buffer = lines.pop() || "";
+
+            for (const line of lines) {
+              if (line.startsWith("data: ")) {
+                try {
+                  const data = JSON.parse(line.slice(6));
+                  if (data.done) {
+                    console.log("Stream completed");
+                  } else if (data.content) {
+                    aiMessage.text += data.content;
+                    setMessages((prev) => {
+                      const updated = [...prev];
+                      updated[updated.length - 1] = { ...aiMessage };
+                      return updated;
+                    });
+                  }
+                } catch (e) {
+                  console.error("Failed to parse SSE data:", e);
+                }
+              }
+            }
+          }
+
+          console.log("Adding fallback text message:", aiMessage.text);
+          await saveMessage(aiMessage, chatId);
+        }
+      } else {
+        // Regular text message with streaming (potentially with images)
+        const allMessages = [...messages, userMessage];
+        const messagePayload = {
+          messages: allMessages.map((msg, idx) => {
+            // Add uploaded images to the last user message if any
+            if (
+              msg.sender === "user" &&
+              idx === allMessages.length - 1 &&
+              uploadedImages.length > 0
+            ) {
+              return {
+                role: "user",
+                content: [
+                  { type: "text", text: msg.text },
+                  ...uploadedImages.map((img) => ({
+                    type: "image_url",
+                    image_url: { url: img },
+                  })),
+                ],
+              };
+            }
+            return {
+              role: msg.sender === "user" ? "user" : "assistant",
+              content: msg.text,
+            };
+          }),
+        };
+
+        const response = await fetch("/api/chat", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(messagePayload),
+        });
+
+        console.log("API response status:", response.status);
+
+        if (!response.ok) {
+          throw new Error(`API error: ${response.status}`);
+        }
+
+        if (!response.body) {
+          throw new Error("No response body");
+        }
+
+        // Create AI message placeholder
+        aiMessage = {
+          id: Math.random().toString(),
+          text: "",
+          sender: "ai",
+          timestamp: new Date(),
+        };
+
+        setMessages((prev) => [...prev, aiMessage]);
+
+        // Read streaming response
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
+
+          for (const line of lines) {
+            if (line.startsWith("data: ")) {
+              try {
+                const data = JSON.parse(line.slice(6));
+                if (data.done) {
+                  console.log("Stream completed");
+                } else if (data.content) {
+                  aiMessage.text += data.content;
+                  setMessages((prev) => {
+                    const updated = [...prev];
+                    updated[updated.length - 1] = { ...aiMessage };
+                    return updated;
+                  });
+                }
+              } catch (e) {
+                console.error("Failed to parse SSE data:", e);
+              }
+            }
+          }
+        }
+
+        console.log("Adding AI message:", aiMessage.text);
+        await saveMessage(aiMessage, chatId);
       }
-
-      const data = await response.json();
-      console.log("API response data:", data);
-
-      if (!data.message) {
-        throw new Error("No message in response");
-      }
-
-      const aiMessage: Message = {
-        id: Math.random().toString(),
-        text: data.message,
-        sender: "ai",
-        timestamp: new Date(),
-      };
-
-      console.log("Adding AI message:", aiMessage.text);
-      setMessages((prev) => [...prev, aiMessage]);
-      await saveMessage(aiMessage, chatId);
     } catch (error) {
       console.error("Chat error:", error);
       const errorMessage: Message = {
@@ -340,6 +552,24 @@ export default function Chat() {
                             : "bg-gradient-to-br from-gray-800/70 to-gray-900/70 text-gray-100 rounded-bl-lg border border-gray-700/50 hover:border-gray-600/70"
                         }`}
                       >
+                        {message.imageUrl && (
+                          <div className="mb-3">
+                            <img
+                              src={message.imageUrl}
+                              alt="Generated image"
+                              className="rounded-lg max-w-xs h-auto"
+                              onError={(e) => {
+                                console.error(
+                                  "Failed to load image:",
+                                  message.imageUrl,
+                                );
+                                (
+                                  e.currentTarget as HTMLImageElement
+                                ).style.display = "none";
+                              }}
+                            />
+                          </div>
+                        )}
                         <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
                           {message.text}
                         </p>
@@ -396,7 +626,47 @@ export default function Chat() {
         {/* Input area */}
         <div className="border-t border-gray-800/30 bg-black/50 p-4 sm:p-6 backdrop-blur-sm">
           <form onSubmit={handleSendMessage} className="max-w-4xl mx-auto">
+            {/* Image preview */}
+            {uploadedImages.length > 0 && (
+              <div className="mb-3 flex flex-wrap gap-2">
+                {uploadedImages.map((img, idx) => (
+                  <div key={idx} className="relative w-16 h-16">
+                    <img
+                      src={img}
+                      alt={`Uploaded ${idx}`}
+                      className="w-full h-full object-cover rounded-lg"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeImage(idx)}
+                      className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-red-700"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
             <div className="flex gap-3 items-end">
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleImageUpload}
+                accept="image/*"
+                multiple
+                className="hidden"
+              />
+
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="px-4 py-3 bg-gray-800/60 border border-gray-700 text-gray-300 rounded-xl hover:bg-gray-700/60 hover:text-cyan-400 transition-all duration-200 flex-shrink-0 hover:shadow-lg hover:shadow-cyan-500/10 active:scale-95"
+                title="Add images"
+              >
+                <ImageIcon size={18} />
+              </button>
+
               <textarea
                 value={input}
                 onChange={(e) => setInput(e.target.value)}

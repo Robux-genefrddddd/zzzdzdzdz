@@ -3,14 +3,15 @@ import express from "express";
 import cors from "cors";
 import { handleDemo } from "./routes/demo";
 import { handleChat } from "./routes/chat";
+import { handleGenerateImage } from "./routes/image";
 
 export function createServer() {
   const app = express();
 
   // Middleware
   app.use(cors());
-  app.use(express.json());
-  app.use(express.urlencoded({ extended: true }));
+  app.use(express.json({ limit: "50mb" }));
+  app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
   // Example API routes
   app.get("/api/ping", (_req, res) => {
@@ -20,6 +21,7 @@ export function createServer() {
 
   app.get("/api/demo", handleDemo);
   app.post("/api/chat", handleChat);
+  app.post("/api/generate-image", handleGenerateImage);
 
   return app;
 }
