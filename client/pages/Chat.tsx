@@ -42,6 +42,8 @@ export default function Chat() {
   const [currentChatId, setCurrentChatId] = useState<string>("");
   const [typingUsername, setTypingUsername] = useState<string | null>(null);
   const currentChatIdRef = useRef<string>("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadedImages, setUploadedImages] = useState<string[]>([]);
 
   useEffect(() => {
     if (!authLoading && !user) {
