@@ -1,4 +1,5 @@
 import { RequestHandler } from "express";
+import OpenAI from "openai";
 
 export const handleGenerateImage: RequestHandler = async (req, res) => {
   try {
@@ -18,80 +19,52 @@ export const handleGenerateImage: RequestHandler = async (req, res) => {
 
     console.log("Generating image with prompt:", prompt.substring(0, 100));
 
-    const requestBody = {
-      model: "black-forest-labs/flux.2-klein-4b",
-      prompt: prompt,
-      max_tokens: 1024,
-    };
-
-    const response = await fetch(
-      "https://openrouter.io/api/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${OPENROUTER_API_KEY}`,
-          "Referer": "https://pinia.example.com",
-          "X-Title": "PinIA Chat",
-        },
-        body: JSON.stringify(requestBody),
+    // Initialize OpenAI client with OpenRouter configuration
+    const client = new OpenAI({
+      baseURL: "https://openrouter.ai/api/v1",
+      apiKey: OPENROUTER_API_KEY,
+      defaultHeaders: {
+        "HTTP-Referer": "https://pinia.example.com",
+        "X-Title": "PinIA Chat",
       },
-    );
+    });
 
-    console.log("OpenRouter image generation status:", response.status);
+    // Use streaming for image generation
+    const stream = await client.chat.completions.create({
+      model: "bytedance-seed/seedream-4.5",
+      messages: [
+        {
+          role: "user",
+          content: `Generate an image: ${prompt}`,
+        },
+      ],
+      max_tokens: 1024,
+      stream: true,
+    });
 
-    const responseText = await response.text();
-    console.log("OpenRouter image response length:", responseText.length);
+    console.log("Image generation stream started");
 
-    if (!response.ok) {
-      console.error("OpenRouter HTTP error:", response.status);
-      if (responseText) {
-        try {
-          const errorData = JSON.parse(responseText);
-          console.error("OpenRouter error data:", errorData);
-          return res.status(response.status).json(errorData);
-        } catch (e) {
-          console.error("Failed to parse error response:", responseText);
-          return res.status(response.status).json({ error: responseText });
-        }
+    // Set headers for streaming
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+
+    let fullResponse = "";
+
+    // Stream the response
+    for await (const chunk of stream) {
+      const content = chunk.choices[0]?.delta?.content || "";
+      if (content) {
+        fullResponse += content;
+        res.write(`data: ${JSON.stringify({ content })}\n\n`);
       }
-      return res
-        .status(response.status)
-        .json({ error: "Empty error response from OpenRouter" });
     }
 
-    if (!responseText) {
-      console.error("OpenRouter returned empty response");
-      return res.status(500).json({ error: "Empty response from OpenRouter" });
-    }
+    console.log("Image generation completed, response length:", fullResponse.length);
 
-    let data;
-    try {
-      data = JSON.parse(responseText);
-    } catch (e) {
-      console.error("Failed to parse OpenRouter response:", e);
-      return res
-        .status(500)
-        .json({ error: "Invalid response format from OpenRouter" });
-    }
-
-    const imageUrl =
-      data.choices?.[0]?.message?.image_url?.url ||
-      data.choices?.[0]?.message?.content;
-
-    console.log(
-      "Image generated successfully, URL length:",
-      imageUrl?.length || 0,
-    );
-
-    if (!imageUrl) {
-      console.error("No image URL in response:", data);
-      return res
-        .status(500)
-        .json({ error: "No image generated from the model" });
-    }
-
-    res.json({ imageUrl, prompt });
+    // Send completion signal
+    res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+    res.end();
   } catch (error) {
     console.error("Image generation API error:", error);
     res.status(500).json({
