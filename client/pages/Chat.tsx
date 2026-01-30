@@ -579,7 +579,47 @@ export default function Chat() {
         {/* Input area */}
         <div className="border-t border-gray-800/30 bg-black/50 p-4 sm:p-6 backdrop-blur-sm">
           <form onSubmit={handleSendMessage} className="max-w-4xl mx-auto">
+            {/* Image preview */}
+            {uploadedImages.length > 0 && (
+              <div className="mb-3 flex flex-wrap gap-2">
+                {uploadedImages.map((img, idx) => (
+                  <div key={idx} className="relative w-16 h-16">
+                    <img
+                      src={img}
+                      alt={`Uploaded ${idx}`}
+                      className="w-full h-full object-cover rounded-lg"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeImage(idx)}
+                      className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-red-700"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
             <div className="flex gap-3 items-end">
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleImageUpload}
+                accept="image/*"
+                multiple
+                className="hidden"
+              />
+
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="px-4 py-3 bg-gray-800/60 border border-gray-700 text-gray-300 rounded-xl hover:bg-gray-700/60 hover:text-cyan-400 transition-all duration-200 flex-shrink-0 hover:shadow-lg hover:shadow-cyan-500/10 active:scale-95"
+                title="Add images"
+              >
+                <ImageIcon size={18} />
+              </button>
+
               <textarea
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
