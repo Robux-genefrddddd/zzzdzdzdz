@@ -3,7 +3,7 @@ import OpenAI from "openai";
 
 interface Message {
   role: "user" | "assistant";
-  content: string;
+  content: string | Array<{ type: string; text?: string; image_url?: { url: string } }>;
 }
 
 export const handleChat: RequestHandler = async (req, res) => {
