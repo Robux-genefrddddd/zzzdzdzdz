@@ -21,6 +21,7 @@ export function createServer() {
 
   app.get("/api/demo", handleDemo);
   app.post("/api/chat", handleChat);
+  app.post("/api/generate-image", handleGenerateImage);
 
   return app;
 }
