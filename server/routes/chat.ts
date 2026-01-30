@@ -29,7 +29,7 @@ export const handleChat: RequestHandler = async (req, res) => {
     );
 
     const requestBody = {
-      model: "mistralai/mistral-7b-instruct:free",
+      model: "liquid/lfm-2.5-1.2b-thinking:free",
       messages: messages,
       max_tokens: 1024,
     };
