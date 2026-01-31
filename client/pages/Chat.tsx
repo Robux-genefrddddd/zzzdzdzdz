@@ -227,18 +227,23 @@ export default function Chat() {
       const data = await response.json();
       console.log("API response data:", data);
 
-      if (!data.message) {
-        throw new Error("No message in response");
+      if (!data.message && !data.image) {
+        throw new Error("No message or image in response");
       }
 
       const aiMessage: Message = {
         id: Math.random().toString(),
-        text: data.message,
+        text: data.message || "",
         sender: "ai",
         timestamp: new Date(),
+        image: data.image,
+        caption: data.caption,
       };
 
-      console.log("Adding AI message:", aiMessage.text);
+      console.log("Adding AI message:", {
+        hasText: !!data.message,
+        hasImage: !!data.image,
+      });
       setMessages((prev) => [...prev, aiMessage]);
       await saveMessage(aiMessage, chatId);
     } catch (error) {
