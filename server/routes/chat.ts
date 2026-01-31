@@ -1,10 +1,55 @@
 import { RequestHandler } from "express";
+import { OpenAI } from "openai";
 
 interface Message {
   role: "user" | "assistant";
   content: string;
   reasoning_details?: unknown;
 }
+
+interface ChatResponse {
+  message?: string;
+  image?: string; // base64 encoded image
+  caption?: string; // image description
+  error?: string;
+}
+
+const createOpenRouterClient = () => {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) {
+    throw new Error("OpenRouter API key not configured");
+  }
+
+  return new OpenAI({
+    apiKey,
+    baseURL: "https://openrouter.io/api/v1",
+    defaultHeaders: {
+      "HTTP-Referer": "http://localhost:8080",
+      "X-Title": "PinIA Chat",
+    },
+  });
+};
+
+// Detect if user is asking for image generation
+const isImageGenerationRequest = (text: string): boolean => {
+  const imageKeywords = [
+    "generate image",
+    "create image",
+    "draw",
+    "design",
+    "make a picture",
+    "image of",
+    "picture of",
+    "show me",
+    "visual of",
+    "artwork",
+    "illustration",
+    "generate a picture",
+  ];
+
+  const lowerText = text.toLowerCase();
+  return imageKeywords.some((keyword) => lowerText.includes(keyword));
+};
 
 export const handleChat: RequestHandler = async (req, res) => {
   try {
@@ -15,114 +60,92 @@ export const handleChat: RequestHandler = async (req, res) => {
       return res.status(400).json({ error: "Invalid messages format" });
     }
 
-    const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
-    if (!OPENROUTER_API_KEY) {
-      console.error("OpenRouter API key not configured");
-      return res
-        .status(500)
-        .json({ error: "OpenRouter API key not configured" });
-    }
+    const client = createOpenRouterClient();
 
     console.log(
       "Sending request to OpenRouter with messages:",
       messages.length,
     );
 
-    // Get the origin from the request or use a fallback
-    const origin = req.get('origin') || req.get('referer') || 'http://localhost:8080';
+    // Get the last user message
+    const lastMessage = messages[messages.length - 1];
+    const isImageRequest =
+      lastMessage && lastMessage.role === "user"
+        ? isImageGenerationRequest(lastMessage.content)
+        : false;
 
-    const requestBody = {
-      model: "openai/gpt-3.5-turbo",
-      messages: messages.map((msg) => ({
-        role: msg.role,
-        content: msg.content,
-      })),
-      max_tokens: 1024,
-    };
+    const response: ChatResponse = {};
 
-    console.log("Request to OpenRouter:", {
-      url: "https://openrouter.io/api/v1/chat/completions",
-      model: requestBody.model,
-      messageCount: messages.length,
-      referer: origin,
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": "Bearer [KEY]",
-        "HTTP-Referer": origin,
-        "X-Title": "PinIA Chat",
-      },
-    });
+    if (isImageRequest) {
+      // Generate image using FLUX model
+      console.log("Detected image generation request, calling FLUX model");
 
-    const response = await fetch(
-      "https://openrouter.io/api/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
-          "HTTP-Referer": origin,
-          "X-Title": "PinIA Chat",
-        },
-        body: JSON.stringify(requestBody),
-      },
-    );
+      try {
+        const imageResponse = await client.messages.create({
+          model: "black-forest-labs/flux.2-klein-4b",
+          max_tokens: 1024,
+          messages: [
+            {
+              role: "user",
+              content: lastMessage.content,
+            },
+          ],
+        });
 
-    console.log("OpenRouter response status:", response.status);
+        // Extract image data and caption
+        const content = imageResponse.content[0];
 
-    // Read response as text first to debug
-    const responseText = await response.text();
-    console.log("OpenRouter raw response length:", responseText.length);
-    console.log("OpenRouter raw response:", responseText.substring(0, 500));
+        if (content.type === "image") {
+          response.image = content.source.data; // base64 image
+          response.caption = lastMessage.content; // Use the prompt as caption
+        } else if (content.type === "text") {
+          response.caption = content.text;
+        }
+      } catch (imageError) {
+        console.error("Image generation error:", imageError);
+        // Fallback to text response if image generation fails
+        const textResponse = await client.messages.create({
+          model: "openai/gpt-3.5-turbo",
+          max_tokens: 1024,
+          messages,
+        });
 
-    if (!response.ok) {
-      console.error("OpenRouter HTTP error:", response.status);
-      if (responseText) {
-        try {
-          const errorData = JSON.parse(responseText);
-          console.error("OpenRouter error data:", errorData);
-          return res.status(response.status).json(errorData);
-        } catch (e) {
-          console.error("Failed to parse error response:", responseText);
-          return res.status(response.status).json({ error: responseText });
+        const textContent = textResponse.content[0];
+        if (textContent.type === "text") {
+          response.message = textContent.text;
+        } else {
+          response.message =
+            "I encountered an error generating the image. Please try again.";
         }
       }
-      return res
-        .status(response.status)
-        .json({ error: "Empty error response from OpenRouter" });
+    } else {
+      // Standard text response
+      console.log("Generating text response using GPT-3.5");
+
+      const textResponse = await client.messages.create({
+        model: "openai/gpt-3.5-turbo",
+        max_tokens: 1024,
+        messages,
+      });
+
+      const textContent = textResponse.content[0];
+      if (textContent.type === "text") {
+        response.message = textContent.text;
+      } else {
+        response.message = "I couldn't generate a response.";
+      }
     }
 
-    if (!responseText) {
-      console.error("OpenRouter returned empty response");
-      return res.status(500).json({ error: "Empty response from OpenRouter" });
-    }
-
-    let data;
-    try {
-      data = JSON.parse(responseText);
-    } catch (e) {
-      console.error("Failed to parse OpenRouter response:", e);
-      return res
-        .status(500)
-        .json({ error: "Invalid response format from OpenRouter" });
-    }
-
-    const assistantMessage =
-      data.choices?.[0]?.message?.content || "I couldn't generate a response.";
-
-    console.log(
-      "OpenRouter response received:",
-      assistantMessage.substring(0, 100),
-    );
-
-    res.json({
-      message: assistantMessage,
+    console.log("Response prepared:", {
+      hasMessage: !!response.message,
+      hasImage: !!response.image,
     });
+
+    res.json(response);
   } catch (error) {
     console.error("Chat API error:", error);
-    res
-      .status(500)
-      .json({
-        error: `Server error: ${error instanceof Error ? error.message : "Unknown error"}`,
-      });
+    res.status(500).json({
+      error: `Server error: ${error instanceof Error ? error.message : "Unknown error"}`,
+    });
   }
 };
