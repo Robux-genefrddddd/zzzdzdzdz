@@ -20,6 +20,8 @@ interface Message {
   text: string;
   sender: "user" | "ai";
   timestamp: Date;
+  image?: string; // base64 encoded image
+  caption?: string; // image description
 }
 
 export default function Chat() {
