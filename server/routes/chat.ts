@@ -1,9 +1,51 @@
 import { RequestHandler } from "express";
+import OpenAI from "openai";
 
 interface Message {
   role: "user" | "assistant";
   content: string;
+  reasoning_details?: unknown;
 }
+
+interface ChatResponse {
+  message?: string;
+  image?: string; // base64 encoded image data URL
+  caption?: string; // image description
+  error?: string;
+}
+
+const createOpenRouterClient = () => {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) {
+    throw new Error("OpenRouter API key not configured");
+  }
+
+  return new OpenAI({
+    baseURL: "https://openrouter.ai/api/v1",
+    apiKey,
+  });
+};
+
+// Detect if user is asking for image generation
+const isImageGenerationRequest = (text: string): boolean => {
+  const imageKeywords = [
+    "generate image",
+    "create image",
+    "draw",
+    "design",
+    "make a picture",
+    "image of",
+    "picture of",
+    "show me",
+    "visual of",
+    "artwork",
+    "illustration",
+    "generate a picture",
+  ];
+
+  const lowerText = text.toLowerCase();
+  return imageKeywords.some((keyword) => lowerText.includes(keyword));
+};
 
 export const handleChat: RequestHandler = async (req, res) => {
   try {
@@ -14,98 +56,100 @@ export const handleChat: RequestHandler = async (req, res) => {
       return res.status(400).json({ error: "Invalid messages format" });
     }
 
-    const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
-    if (!OPENROUTER_API_KEY) {
-      console.error("OpenRouter API key not configured");
-      return res
-        .status(500)
-        .json({ error: "OpenRouter API key not configured" });
-    }
+    const client = createOpenRouterClient();
 
     console.log(
       "Sending request to OpenRouter with messages:",
       messages.length,
     );
 
-    const requestBody = {
-      model: "openai/gpt-3.5-turbo",
-      messages: messages,
-      max_tokens: 1024,
-    };
+    // Get the last user message
+    const lastMessage = messages[messages.length - 1];
+    const isImageRequest =
+      lastMessage && lastMessage.role === "user"
+        ? isImageGenerationRequest(lastMessage.content)
+        : false;
 
-    console.log("Request to OpenRouter:", {
-      url: "https://openrouter.io/api/v1/chat/completions",
-      model: requestBody.model,
-      messageCount: messages.length,
+    const response: ChatResponse = {};
+
+    if (isImageRequest) {
+      // Generate image using Google Gemini 2.0 Flash Exp (Free)
+      console.log(
+        "Detected image generation request, calling Gemini 2.0 Flash",
+      );
+
+      try {
+        const imageResponse = await client.chat.completions.create({
+          model: "google/gemini-2.0-flash-exp:free",
+          messages: [
+            {
+              role: "user",
+              content: lastMessage.content,
+            },
+          ],
+          modalities: ["image", "text"] as any,
+        });
+
+        console.log("Image generation response received");
+
+        const message = imageResponse.choices[0]?.message;
+        if (message) {
+          // Check for generated images
+          const images = (message as any).images;
+          if (images && images.length > 0) {
+            const image = images[0];
+            if (image.image_url?.url) {
+              response.image = image.image_url.url; // Base64 data URL
+              response.caption = lastMessage.content;
+            }
+          }
+          // Also capture any text content
+          if (message.content) {
+            response.message = message.content;
+          }
+        }
+
+        // If no image was generated, log it
+        if (!response.image) {
+          console.log("No image in response");
+        }
+      } catch (imageError) {
+        console.error("Image generation error:", imageError);
+        response.message =
+          "I encountered an error generating the image. Please try again.";
+      }
+    } else {
+      // Standard text response using Google Gemini 2.0 Flash Exp (Free)
+      console.log("Generating text response using Gemini 2.0 Flash");
+
+      try {
+        const textResponse = await client.chat.completions.create({
+          model: "google/gemini-2.0-flash-exp:free",
+          messages,
+        });
+
+        const message = textResponse.choices[0]?.message;
+        if (message?.content) {
+          response.message = message.content;
+        } else {
+          response.message = "I couldn't generate a response.";
+        }
+      } catch (textError) {
+        console.error("Text generation error:", textError);
+        response.message = "Error generating response. Please try again.";
+      }
+    }
+
+    console.log("Response prepared:", {
+      hasMessage: !!response.message,
+      hasImage: !!response.image,
     });
 
-    const response = await fetch(
-      "https://openrouter.io/api/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${OPENROUTER_API_KEY}`,
-          "HTTP-Referer": "https://pinia.example.com",
-          "X-Title": "PinIA Chat",
-        },
-        body: JSON.stringify(requestBody),
-      },
-    );
-
-    console.log("OpenRouter response status:", response.status);
-
-    // Read response as text first to debug
-    const responseText = await response.text();
-    console.log("OpenRouter raw response length:", responseText.length);
-    console.log("OpenRouter raw response:", responseText.substring(0, 500));
-
-    if (!response.ok) {
-      console.error("OpenRouter HTTP error:", response.status);
-      if (responseText) {
-        try {
-          const errorData = JSON.parse(responseText);
-          console.error("OpenRouter error data:", errorData);
-          return res.status(response.status).json(errorData);
-        } catch (e) {
-          console.error("Failed to parse error response:", responseText);
-          return res.status(response.status).json({ error: responseText });
-        }
-      }
-      return res
-        .status(response.status)
-        .json({ error: "Empty error response from OpenRouter" });
-    }
-
-    if (!responseText) {
-      console.error("OpenRouter returned empty response");
-      return res.status(500).json({ error: "Empty response from OpenRouter" });
-    }
-
-    let data;
-    try {
-      data = JSON.parse(responseText);
-    } catch (e) {
-      console.error("Failed to parse OpenRouter response:", e);
-      return res
-        .status(500)
-        .json({ error: "Invalid response format from OpenRouter" });
-    }
-
-    const assistantMessage =
-      data.choices?.[0]?.message?.content || "I couldn't generate a response.";
-
-    console.log(
-      "OpenRouter response received:",
-      assistantMessage.substring(0, 100),
-    );
-    res.json({ message: assistantMessage });
+    res.json(response);
   } catch (error) {
     console.error("Chat API error:", error);
-    res
-      .status(500)
-      .json({
-        error: `Server error: ${error instanceof Error ? error.message : "Unknown error"}`,
-      });
+    res.status(500).json({
+      error: `Server error: ${error instanceof Error ? error.message : "Unknown error"}`,
+    });
   }
 };

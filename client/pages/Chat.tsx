@@ -20,6 +20,8 @@ interface Message {
   text: string;
   sender: "user" | "ai";
   timestamp: Date;
+  image?: string; // base64 encoded image
+  caption?: string; // image description
 }
 
 export default function Chat() {
@@ -225,18 +227,23 @@ export default function Chat() {
       const data = await response.json();
       console.log("API response data:", data);
 
-      if (!data.message) {
-        throw new Error("No message in response");
+      if (!data.message && !data.image) {
+        throw new Error("No message or image in response");
       }
 
       const aiMessage: Message = {
         id: Math.random().toString(),
-        text: data.message,
+        text: data.message || "",
         sender: "ai",
         timestamp: new Date(),
+        image: data.image,
+        caption: data.caption,
       };
 
-      console.log("Adding AI message:", aiMessage.text);
+      console.log("Adding AI message:", {
+        hasText: !!data.message,
+        hasImage: !!data.image,
+      });
       setMessages((prev) => [...prev, aiMessage]);
       await saveMessage(aiMessage, chatId);
     } catch (error) {
@@ -340,9 +347,29 @@ export default function Chat() {
                             : "bg-gradient-to-br from-gray-800/70 to-gray-900/70 text-gray-100 rounded-bl-lg border border-gray-700/50 hover:border-gray-600/70"
                         }`}
                       >
-                        <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
-                          {message.text}
-                        </p>
+                        {message.image ? (
+                          <div className="flex flex-col gap-2">
+                            <img
+                              src={message.image}
+                              alt={message.caption || "Generated image"}
+                              className="max-w-sm rounded-lg"
+                            />
+                            {message.caption && (
+                              <p className="text-sm leading-relaxed text-gray-300">
+                                {message.caption}
+                              </p>
+                            )}
+                            {message.text && (
+                              <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
+                                {message.text}
+                              </p>
+                            )}
+                          </div>
+                        ) : (
+                          <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
+                            {message.text}
+                          </p>
+                        )}
                         <span
                           className={`text-xs mt-2 block font-medium ${
                             message.sender === "user"
