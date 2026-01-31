@@ -74,7 +74,9 @@ export const handleChat: RequestHandler = async (req, res) => {
 
     if (isImageRequest) {
       // Generate image using Google Gemini 2.0 Flash Exp (Free)
-      console.log("Detected image generation request, calling Gemini 2.0 Flash");
+      console.log(
+        "Detected image generation request, calling Gemini 2.0 Flash",
+      );
 
       try {
         const imageResponse = await client.chat.completions.create({
