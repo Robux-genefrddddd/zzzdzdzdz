@@ -33,10 +33,14 @@ export const handleChat: RequestHandler = async (req, res) => {
       max_tokens: 1024,
     };
 
+    // Get the origin from the request or use a fallback
+    const origin = req.get('origin') || req.get('referer') || 'http://localhost:8080';
+
     console.log("Request to OpenRouter:", {
       url: "https://openrouter.io/api/v1/chat/completions",
       model: requestBody.model,
       messageCount: messages.length,
+      referer: origin,
     });
 
     const response = await fetch(
@@ -46,7 +50,7 @@ export const handleChat: RequestHandler = async (req, res) => {
         headers: {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
-          "HTTP-Referer": typeof window !== 'undefined' ? window.location.origin : "https://default-app.com",
+          "HTTP-Referer": origin,
           "X-Title": "PinIA Chat",
         },
         body: JSON.stringify(requestBody),
