@@ -108,8 +108,6 @@ export const handleChat: RequestHandler = async (req, res) => {
 
     const assistantMessage =
       data.choices?.[0]?.message?.content || "I couldn't generate a response.";
-    const reasoningDetails =
-      data.choices?.[0]?.message?.reasoning_details || null;
 
     console.log(
       "OpenRouter response received:",
@@ -118,7 +116,6 @@ export const handleChat: RequestHandler = async (req, res) => {
 
     res.json({
       message: assistantMessage,
-      reasoning_details: reasoningDetails,
     });
   } catch (error) {
     console.error("Chat API error:", error);
