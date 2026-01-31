@@ -350,7 +350,7 @@ export default function Chat() {
                         {message.image ? (
                           <div className="flex flex-col gap-2">
                             <img
-                              src={`data:image/png;base64,${message.image}`}
+                              src={message.image}
                               alt={message.caption || "Generated image"}
                               className="max-w-sm rounded-lg"
                             />
