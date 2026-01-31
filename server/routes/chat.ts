@@ -1,9 +1,17 @@
 import { RequestHandler } from "express";
+import OpenAI from "openai";
 
 interface Message {
   role: "user" | "assistant";
   content: string;
+  reasoning_details?: unknown;
 }
+
+type ORChatMessage = {
+  role: string;
+  content: string | null;
+  reasoning_details?: unknown;
+};
 
 export const handleChat: RequestHandler = async (req, res) => {
   try {
@@ -27,83 +35,54 @@ export const handleChat: RequestHandler = async (req, res) => {
       messages.length,
     );
 
-    const requestBody = {
-      model: "allenai/molmo-2-8b:free",
-      messages: messages,
-      max_tokens: 1024,
-    };
+    // Initialize OpenAI client with OpenRouter base URL
+    const client = new OpenAI({
+      baseURL: "https://openrouter.io/api/v1",
+      apiKey: OPENROUTER_API_KEY,
+    });
 
     // Get the origin from the request or use a fallback
     const origin = req.get('origin') || req.get('referer') || 'http://localhost:8080';
 
     console.log("Request to OpenRouter:", {
-      url: "https://openrouter.io/api/v1/chat/completions",
-      model: requestBody.model,
+      model: "arcee-ai/trinity-large-preview:free",
       messageCount: messages.length,
       referer: origin,
     });
 
-    const response = await fetch(
-      "https://openrouter.io/api/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
-          "HTTP-Referer": origin,
-          "X-Title": "PinIA Chat",
-        },
-        body: JSON.stringify(requestBody),
+    // Create chat completion with reasoning enabled
+    const apiResponse = await client.chat.completions.create({
+      model: "arcee-ai/trinity-large-preview:free",
+      messages: messages.map((msg) => ({
+        role: msg.role,
+        content: msg.content,
+        ...(msg.reasoning_details && { reasoning_details: msg.reasoning_details }),
+      })),
+      max_tokens: 1024,
+      // @ts-ignore - reasoning is a valid parameter for some OpenRouter models
+      reasoning: { enabled: true },
+      // @ts-ignore - headers are passed through
+      headers: {
+        "HTTP-Referer": origin,
+        "X-Title": "PinIA Chat",
       },
-    );
+    });
 
-    console.log("OpenRouter response status:", response.status);
+    console.log("OpenRouter response received");
 
-    // Read response as text first to debug
-    const responseText = await response.text();
-    console.log("OpenRouter raw response length:", responseText.length);
-    console.log("OpenRouter raw response:", responseText.substring(0, 500));
-
-    if (!response.ok) {
-      console.error("OpenRouter HTTP error:", response.status);
-      if (responseText) {
-        try {
-          const errorData = JSON.parse(responseText);
-          console.error("OpenRouter error data:", errorData);
-          return res.status(response.status).json(errorData);
-        } catch (e) {
-          console.error("Failed to parse error response:", responseText);
-          return res.status(response.status).json({ error: responseText });
-        }
-      }
-      return res
-        .status(response.status)
-        .json({ error: "Empty error response from OpenRouter" });
-    }
-
-    if (!responseText) {
-      console.error("OpenRouter returned empty response");
-      return res.status(500).json({ error: "Empty response from OpenRouter" });
-    }
-
-    let data;
-    try {
-      data = JSON.parse(responseText);
-    } catch (e) {
-      console.error("Failed to parse OpenRouter response:", e);
-      return res
-        .status(500)
-        .json({ error: "Invalid response format from OpenRouter" });
-    }
-
-    const assistantMessage =
-      data.choices?.[0]?.message?.content || "I couldn't generate a response.";
+    // Extract the assistant message with reasoning details
+    const response = apiResponse.choices[0].message as ORChatMessage;
+    const assistantMessage = response.content || "I couldn't generate a response.";
 
     console.log(
-      "OpenRouter response received:",
+      "OpenRouter assistant message:",
       assistantMessage.substring(0, 100),
     );
-    res.json({ message: assistantMessage });
+
+    res.json({
+      message: assistantMessage,
+      reasoning_details: response.reasoning_details,
+    });
   } catch (error) {
     console.error("Chat API error:", error);
     res
