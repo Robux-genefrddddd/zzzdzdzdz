@@ -73,12 +73,12 @@ export const handleChat: RequestHandler = async (req, res) => {
     const response: ChatResponse = {};
 
     if (isImageRequest) {
-      // Generate image using Sourceful Riverflow model
-      console.log("Detected image generation request, calling Riverflow model");
+      // Generate image using Google Gemini 2.0 Flash Exp (Free)
+      console.log("Detected image generation request, calling Gemini 2.0 Flash");
 
       try {
         const imageResponse = await client.chat.completions.create({
-          model: "sourceful/riverflow-v2-standard-preview",
+          model: "google/gemini-2.0-flash-exp:free",
           messages: [
             {
               role: "user",
@@ -109,37 +109,20 @@ export const handleChat: RequestHandler = async (req, res) => {
 
         // If no image was generated, log it
         if (!response.image) {
-          console.log("No image in response, trying text fallback");
+          console.log("No image in response");
         }
       } catch (imageError) {
         console.error("Image generation error:", imageError);
-        // Fallback to text response if image generation fails
-        try {
-          const textResponse = await client.chat.completions.create({
-            model: "openai/gpt-3.5-turbo",
-            messages,
-          });
-
-          const message = textResponse.choices[0]?.message;
-          if (message?.content) {
-            response.message = message.content;
-          } else {
-            response.message =
-              "I encountered an error generating the image. Please try again.";
-          }
-        } catch (fallbackError) {
-          console.error("Fallback text generation error:", fallbackError);
-          response.message =
-            "I encountered an error. Please try again later.";
-        }
+        response.message =
+          "I encountered an error generating the image. Please try again.";
       }
     } else {
-      // Standard text response
-      console.log("Generating text response using GPT-3.5");
+      // Standard text response using Google Gemini 2.0 Flash Exp (Free)
+      console.log("Generating text response using Gemini 2.0 Flash");
 
       try {
         const textResponse = await client.chat.completions.create({
-          model: "openai/gpt-3.5-turbo",
+          model: "google/gemini-2.0-flash-exp:free",
           messages,
         });
 
