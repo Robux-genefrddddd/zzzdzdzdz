@@ -81,7 +81,7 @@ export const handleChat: RequestHandler = async (req, res) => {
       console.log("Detected image generation request, calling FLUX model");
 
       try {
-        const imageResponse = await client.messages.create({
+        const imageResponse = await client.chat.completions.create({
           model: "black-forest-labs/flux.2-klein-4b",
           max_tokens: 1024,
           messages: [
@@ -90,29 +90,27 @@ export const handleChat: RequestHandler = async (req, res) => {
               content: lastMessage.content,
             },
           ],
-        });
+        } as any);
 
-        // Extract image data and caption
-        const content = imageResponse.content[0];
-
-        if (content.type === "image") {
-          response.image = content.source.data; // base64 image
+        // Extract image data from response
+        const firstChoice = imageResponse.choices[0];
+        if (firstChoice.message.content) {
+          // For image models, the content might be base64 encoded image data
+          response.image = firstChoice.message.content;
           response.caption = lastMessage.content; // Use the prompt as caption
-        } else if (content.type === "text") {
-          response.caption = content.text;
         }
       } catch (imageError) {
         console.error("Image generation error:", imageError);
         // Fallback to text response if image generation fails
-        const textResponse = await client.messages.create({
+        const textResponse = await client.chat.completions.create({
           model: "openai/gpt-3.5-turbo",
           max_tokens: 1024,
           messages,
         });
 
-        const textContent = textResponse.content[0];
-        if (textContent.type === "text") {
-          response.message = textContent.text;
+        const firstChoice = textResponse.choices[0];
+        if (firstChoice.message.content) {
+          response.message = firstChoice.message.content;
         } else {
           response.message =
             "I encountered an error generating the image. Please try again.";
@@ -122,15 +120,15 @@ export const handleChat: RequestHandler = async (req, res) => {
       // Standard text response
       console.log("Generating text response using GPT-3.5");
 
-      const textResponse = await client.messages.create({
+      const textResponse = await client.chat.completions.create({
         model: "openai/gpt-3.5-turbo",
         max_tokens: 1024,
         messages,
       });
 
-      const textContent = textResponse.content[0];
-      if (textContent.type === "text") {
-        response.message = textContent.text;
+      const firstChoice = textResponse.choices[0];
+      if (firstChoice.message.content) {
+        response.message = firstChoice.message.content;
       } else {
         response.message = "I couldn't generate a response.";
       }
