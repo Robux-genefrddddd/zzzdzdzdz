@@ -1,5 +1,5 @@
 import { RequestHandler } from "express";
-import { OpenAI } from "openai";
+import OpenRouter from "@openrouter/sdk";
 
 interface Message {
   role: "user" | "assistant";
@@ -20,13 +20,8 @@ const createOpenRouterClient = () => {
     throw new Error("OpenRouter API key not configured");
   }
 
-  return new OpenAI({
+  return new OpenRouter({
     apiKey,
-    baseURL: "https://openrouter.io/api/v1",
-    defaultHeaders: {
-      "HTTP-Referer": "http://localhost:8080",
-      "X-Title": "PinIA Chat",
-    },
   });
 };
 
@@ -60,7 +55,7 @@ export const handleChat: RequestHandler = async (req, res) => {
       return res.status(400).json({ error: "Invalid messages format" });
     }
 
-    const client = createOpenRouterClient();
+    const openrouter = createOpenRouterClient();
 
     console.log(
       "Sending request to OpenRouter with messages:",
@@ -81,56 +76,80 @@ export const handleChat: RequestHandler = async (req, res) => {
       console.log("Detected image generation request, calling FLUX model");
 
       try {
-        const imageResponse = await client.chat.completions.create({
+        const imageResult = await openrouter.chat.send({
           model: "black-forest-labs/flux.2-klein-4b",
-          max_tokens: 1024,
           messages: [
             {
               role: "user",
               content: lastMessage.content,
             },
           ],
+          modalities: ["image", "text"],
         } as any);
 
-        // Extract image data from response
-        const firstChoice = imageResponse.choices[0];
-        if (firstChoice.message.content) {
-          // For image models, the content might be base64 encoded image data
-          response.image = firstChoice.message.content;
-          response.caption = lastMessage.content; // Use the prompt as caption
+        console.log("Image generation response received");
+
+        const message = imageResult.choices?.[0]?.message;
+        if (message) {
+          // Check for generated images
+          if ((message as any).images && (message as any).images.length > 0) {
+            const image = (message as any).images[0];
+            if (image.image_url?.url) {
+              response.image = image.image_url.url;
+              response.caption = lastMessage.content;
+            }
+          }
+          // Also capture any text content
+          if (message.content) {
+            response.message = message.content;
+          }
+        }
+
+        // If no image was generated, log it
+        if (!response.image) {
+          console.log("No image in response, trying text fallback");
         }
       } catch (imageError) {
         console.error("Image generation error:", imageError);
         // Fallback to text response if image generation fails
-        const textResponse = await client.chat.completions.create({
-          model: "openai/gpt-3.5-turbo",
-          max_tokens: 1024,
-          messages,
-        });
+        try {
+          const textResult = await openrouter.chat.send({
+            model: "openai/gpt-3.5-turbo",
+            messages,
+          });
 
-        const firstChoice = textResponse.choices[0];
-        if (firstChoice.message.content) {
-          response.message = firstChoice.message.content;
-        } else {
+          const message = textResult.choices?.[0]?.message;
+          if (message?.content) {
+            response.message = message.content;
+          } else {
+            response.message =
+              "I encountered an error generating the image. Please try again.";
+          }
+        } catch (fallbackError) {
+          console.error("Fallback text generation error:", fallbackError);
           response.message =
-            "I encountered an error generating the image. Please try again.";
+            "I encountered an error. Please try again later.";
         }
       }
     } else {
       // Standard text response
       console.log("Generating text response using GPT-3.5");
 
-      const textResponse = await client.chat.completions.create({
-        model: "openai/gpt-3.5-turbo",
-        max_tokens: 1024,
-        messages,
-      });
+      try {
+        const textResult = await openrouter.chat.send({
+          model: "openai/gpt-3.5-turbo",
+          messages,
+        });
 
-      const firstChoice = textResponse.choices[0];
-      if (firstChoice.message.content) {
-        response.message = firstChoice.message.content;
-      } else {
-        response.message = "I couldn't generate a response.";
+        const message = textResult.choices?.[0]?.message;
+        if (message?.content) {
+          response.message = message.content;
+        } else {
+          response.message = "I couldn't generate a response.";
+        }
+      } catch (textError) {
+        console.error("Text generation error:", textError);
+        response.message = "Error generating response. Please try again.";
       }
     }
 
