@@ -45,8 +45,8 @@ export const handleChat: RequestHandler = async (req, res) => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${OPENROUTER_API_KEY}`,
-          "HTTP-Referer": "https://pinia.example.com",
+          "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
+          "HTTP-Referer": typeof window !== 'undefined' ? window.location.origin : "https://default-app.com",
           "X-Title": "PinIA Chat",
         },
         body: JSON.stringify(requestBody),
