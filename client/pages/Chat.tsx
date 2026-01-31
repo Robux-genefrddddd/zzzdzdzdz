@@ -347,9 +347,29 @@ export default function Chat() {
                             : "bg-gradient-to-br from-gray-800/70 to-gray-900/70 text-gray-100 rounded-bl-lg border border-gray-700/50 hover:border-gray-600/70"
                         }`}
                       >
-                        <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
-                          {message.text}
-                        </p>
+                        {message.image ? (
+                          <div className="flex flex-col gap-2">
+                            <img
+                              src={`data:image/png;base64,${message.image}`}
+                              alt={message.caption || "Generated image"}
+                              className="max-w-sm rounded-lg"
+                            />
+                            {message.caption && (
+                              <p className="text-sm leading-relaxed text-gray-300">
+                                {message.caption}
+                              </p>
+                            )}
+                            {message.text && (
+                              <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
+                                {message.text}
+                              </p>
+                            )}
+                          </div>
+                        ) : (
+                          <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
+                            {message.text}
+                          </p>
+                        )}
                         <span
                           className={`text-xs mt-2 block font-medium ${
                             message.sender === "user"
