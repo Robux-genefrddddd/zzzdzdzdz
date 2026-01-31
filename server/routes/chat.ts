@@ -32,14 +32,12 @@ export const handleChat: RequestHandler = async (req, res) => {
     const origin = req.get('origin') || req.get('referer') || 'http://localhost:8080';
 
     const requestBody = {
-      model: "arcee-ai/trinity-large-preview:free",
+      model: "openai/gpt-3.5-turbo",
       messages: messages.map((msg) => ({
         role: msg.role,
         content: msg.content,
-        ...(msg.reasoning_details && { reasoning_details: msg.reasoning_details }),
       })),
       max_tokens: 1024,
-      reasoning: { enabled: true },
     };
 
     console.log("Request to OpenRouter:", {
@@ -47,6 +45,12 @@ export const handleChat: RequestHandler = async (req, res) => {
       model: requestBody.model,
       messageCount: messages.length,
       referer: origin,
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer [KEY]",
+        "HTTP-Referer": origin,
+        "X-Title": "PinIA Chat",
+      },
     });
 
     const response = await fetch(
