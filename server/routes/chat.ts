@@ -28,7 +28,7 @@ export const handleChat: RequestHandler = async (req, res) => {
     );
 
     const requestBody = {
-      model: "openai/gpt-3.5-turbo",
+      model: "allenai/molmo-2-8b:free",
       messages: messages,
       max_tokens: 1024,
     };
