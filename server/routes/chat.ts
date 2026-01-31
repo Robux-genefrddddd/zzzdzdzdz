@@ -1,5 +1,5 @@
 import { RequestHandler } from "express";
-import { OpenRouter } from "@openrouter/sdk";
+import OpenAI from "openai";
 
 interface Message {
   role: "user" | "assistant";
@@ -9,7 +9,7 @@ interface Message {
 
 interface ChatResponse {
   message?: string;
-  image?: string; // base64 encoded image or URL
+  image?: string; // base64 encoded image data URL
   caption?: string; // image description
   error?: string;
 }
@@ -20,7 +20,8 @@ const createOpenRouterClient = () => {
     throw new Error("OpenRouter API key not configured");
   }
 
-  return new OpenRouter({
+  return new OpenAI({
+    baseURL: "https://openrouter.ai/api/v1",
     apiKey,
   });
 };
@@ -55,7 +56,7 @@ export const handleChat: RequestHandler = async (req, res) => {
       return res.status(400).json({ error: "Invalid messages format" });
     }
 
-    const openrouter = createOpenRouterClient();
+    const client = createOpenRouterClient();
 
     console.log(
       "Sending request to OpenRouter with messages:",
@@ -72,30 +73,31 @@ export const handleChat: RequestHandler = async (req, res) => {
     const response: ChatResponse = {};
 
     if (isImageRequest) {
-      // Generate image using FLUX model
-      console.log("Detected image generation request, calling FLUX model");
+      // Generate image using Sourceful Riverflow model
+      console.log("Detected image generation request, calling Riverflow model");
 
       try {
-        const imageResult = await openrouter.chat.send({
-          model: "black-forest-labs/flux.2-klein-4b",
+        const imageResponse = await client.chat.completions.create({
+          model: "sourceful/riverflow-v2-standard-preview",
           messages: [
             {
               role: "user",
               content: lastMessage.content,
             },
           ],
-          modalities: ["image", "text"],
-        } as any);
+          modalities: ["image", "text"] as any,
+        });
 
         console.log("Image generation response received");
 
-        const message = imageResult.choices?.[0]?.message;
+        const message = imageResponse.choices[0]?.message;
         if (message) {
           // Check for generated images
-          if ((message as any).images && (message as any).images.length > 0) {
-            const image = (message as any).images[0];
+          const images = (message as any).images;
+          if (images && images.length > 0) {
+            const image = images[0];
             if (image.image_url?.url) {
-              response.image = image.image_url.url;
+              response.image = image.image_url.url; // Base64 data URL
               response.caption = lastMessage.content;
             }
           }
@@ -113,12 +115,12 @@ export const handleChat: RequestHandler = async (req, res) => {
         console.error("Image generation error:", imageError);
         // Fallback to text response if image generation fails
         try {
-          const textResult = await openrouter.chat.send({
+          const textResponse = await client.chat.completions.create({
             model: "openai/gpt-3.5-turbo",
             messages,
           });
 
-          const message = textResult.choices?.[0]?.message;
+          const message = textResponse.choices[0]?.message;
           if (message?.content) {
             response.message = message.content;
           } else {
@@ -136,12 +138,12 @@ export const handleChat: RequestHandler = async (req, res) => {
       console.log("Generating text response using GPT-3.5");
 
       try {
-        const textResult = await openrouter.chat.send({
+        const textResponse = await client.chat.completions.create({
           model: "openai/gpt-3.5-turbo",
           messages,
         });
 
-        const message = textResult.choices?.[0]?.message;
+        const message = textResponse.choices[0]?.message;
         if (message?.content) {
           response.message = message.content;
         } else {
