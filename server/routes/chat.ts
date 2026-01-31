@@ -1,5 +1,5 @@
 import { RequestHandler } from "express";
-import OpenRouter from "@openrouter/sdk";
+import { OpenRouter } from "@openrouter/sdk";
 
 interface Message {
   role: "user" | "assistant";
@@ -9,7 +9,7 @@ interface Message {
 
 interface ChatResponse {
   message?: string;
-  image?: string; // base64 encoded image
+  image?: string; // base64 encoded image or URL
   caption?: string; // image description
   error?: string;
 }
